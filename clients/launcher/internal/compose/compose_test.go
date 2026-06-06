@@ -1,0 +1,58 @@
+package compose
+
+import (
+	"testing"
+)
+
+func TestNew(t *testing.T) {
+	t.Setenv("PANDORA_HOME", "/tmp/test-pandora")
+	c := New()
+	if c.Home != "/tmp/test-pandora" {
+		t.Errorf("Home = %q, want /tmp/test-pandora", c.Home)
+	}
+	if c.ComposeFile != "/tmp/test-pandora/docker-compose.yml" {
+		t.Errorf("ComposeFile = %q", c.ComposeFile)
+	}
+	if c.EnvFile != "/tmp/test-pandora/.env" {
+		t.Errorf("EnvFile = %q", c.EnvFile)
+	}
+}
+
+func TestAllProfiles(t *testing.T) {
+	profiles := AllProfiles()
+	if len(profiles) != 4 {
+		t.Errorf("AllProfiles() len = %d, want 4 (2 pairs)", len(profiles))
+	}
+	// Verify pairs
+	expected := []string{"--profile", "cli", "--profile", "c2-sliver"}
+	for i, v := range expected {
+		if profiles[i] != v {
+			t.Errorf("profiles[%d] = %q, want %q", i, profiles[i], v)
+		}
+	}
+}
+
+func TestBaseArgs(t *testing.T) {
+	c := &Compose{
+		Home:        "/test",
+		ComposeFile: "/test/docker-compose.yml",
+		EnvFile:     "/test/.env",
+	}
+	args := c.baseArgs()
+	if args[0] != "compose" || args[2] != "/test/docker-compose.yml" || args[4] != "/test/.env" {
+		t.Errorf("baseArgs = %v", args)
+	}
+}
+
+func TestImageTag(t *testing.T) {
+	tests := map[string]string{
+		"v1.0.21":  "1.0.21",
+		"1.0.21":   "1.0.21",
+		" latest ": "latest",
+	}
+	for input, want := range tests {
+		if got := imageTag(input); got != want {
+			t.Errorf("imageTag(%q) = %q, want %q", input, got, want)
+		}
+	}
+}

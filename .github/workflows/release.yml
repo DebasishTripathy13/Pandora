@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  goreleaser:
+    name: Release CLI binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: clients/launcher/go.mod
+          cache-dependency-path: clients/launcher/go.sum
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+          workdir: clients/launcher
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-release:
+    name: Publish release after images verified
+    needs: [goreleaser]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Docker images
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          IMAGES=(
+            pandora-litellm
+            pandora-sandbox
+            pandora-langgraph
+            pandora-web
+            pandora-cli
+            pandora-c2-sliver
+          )
+          for img in "${IMAGES[@]}"; do
+            echo "Checking ghcr.io/debasishtripathy13/${img}:${TAG} ..."
+            for i in $(seq 1 20); do
+              if docker manifest inspect "ghcr.io/debasishtripathy13/${img}:${TAG}" > /dev/null 2>&1; then
+                echo "  ✓ ${img}"
+                break
+              fi
+              [ $i -eq 20 ] && { echo "  ✗ ${img} not found after 10 min"; exit 1; }
+              sleep 30
+            done
+          done
+
+      - name: Publish draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --repo debasishtripathy13/Pandora
